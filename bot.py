@@ -240,3 +240,12 @@ def run():
 
 threading.Thread(target=run).start()
 # =============================================
+
+# ===== Discord Bot 실행 =====
+@bot.event
+async def on_ready():
+    print(f"✅ 로그인: {bot.user}")
+    load_data()
+    bot.loop.create_task(alarm_loop())
+
+bot.run(TOKEN)
