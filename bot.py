@@ -1,11 +1,12 @@
 import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-import re, json, os, threading, time
+import re, json, os
 from typing import Dict, Any
 import discord
 from discord.ext import commands
-from flask import Flask, jsonify
+from flask import Flask
+import threading
 
 # ===== 설정 =====
 TOKEN = os.getenv("TOKEN")  # Render 환경변수에서 불러오기
@@ -195,18 +196,30 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return """
-    <html>
-        <head><title>BossTimerBot</title></head>
-        <body style="font-family:Arial; text-align:center; margin-top:15%;">
-            <h1>✅ BossTimerBot is running on Render!</h1>
-            <p>Discord Bot is online and active.</p>
-        </body>
+    html = """
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <title>BossTimerBot</title>
+        <style>
+            body { font-family: Arial, sans-serif; text-align:center; margin-top:15%; background:#f7f9fb; color:#333; }
+            h1 { color:#2ecc71; }
+            p { color:#555; }
+        </style>
+    </head>
+    <body>
+        <h1>✅ BossTimerBot is running on Render!</h1>
+        <p>Discord Bot is online and healthy.</p>
+        <p>Check your Discord server for .보스 and .삭제 commands.</p>
+    </body>
     </html>
-    """, 200, {"Content-Type": "text/html; charset=utf-8"}
+    """
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port, threaded=True)
+    app.run(host='0.0.0.0', port=port, threaded=True, use_reloader=False)
 
 # ===== Discord Bot 실행 =====
 @bot.event
@@ -218,11 +231,7 @@ async def on_ready():
 def run_discord():
     bot.run(TOKEN)
 
-# ===== 실행 순서 (Flask → Discord) =====
+# 두 개를 병렬 실행
 if __name__ == "__main__":
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.daemon = True
-    flask_thread.start()
-
-    time.sleep(3)  # Flask 감지 대기
+    threading.Thread(target=run_flask, daemon=True).start()
     run_discord()
