@@ -198,7 +198,9 @@ def home():
     return "✅ BossTimerBot is running on Render!"
 
 def run_flask():
-    app.run(host='0.0.0.0', port=8080)
+    import os
+    port = int(os.environ.get("PORT", 8080))  # Render가 자동으로 지정한 포트 사용
+    app.run(host='0.0.0.0', port=port)
 
 # ===== Discord Bot 실행 =====
 @bot.event
