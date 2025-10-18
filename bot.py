@@ -195,8 +195,15 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return jsonify({"status": "ok", "message": "✅ BossTimerBot is running on Render!"})
-
+    return """
+    <html>
+        <head><title>BossTimerBot</title></head>
+        <body style="font-family:Arial; text-align:center; margin-top:15%;">
+            <h1>✅ BossTimerBot is running on Render!</h1>
+            <p>Discord Bot is online and active.</p>
+        </body>
+    </html>
+    """, 200, {"Content-Type": "text/html; charset=utf-8"}
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port, threaded=True)
