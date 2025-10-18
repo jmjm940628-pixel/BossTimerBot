@@ -5,7 +5,7 @@ import re, json, os, threading, time
 from typing import Dict, Any
 import discord
 from discord.ext import commands
-from flask import Flask
+from flask import Flask, jsonify
 
 # ===== 설정 =====
 TOKEN = os.getenv("TOKEN")  # Render 환경변수에서 불러오기
@@ -195,11 +195,11 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "✅ BossTimerBot is running on Render!"
+    return jsonify({"status": "ok", "message": "✅ BossTimerBot is running on Render!"})
 
 def run_flask():
-    port = int(os.environ.get("PORT", 8080))  # Render에서 지정한 포트 사용
-    app.run(host='0.0.0.0', port=port)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port, threaded=True)
 
 # ===== Discord Bot 실행 =====
 @bot.event
@@ -211,14 +211,11 @@ async def on_ready():
 def run_discord():
     bot.run(TOKEN)
 
-# ===== 실행 순서 (Flask → Discord 순서로) =====
+# ===== 실행 순서 (Flask → Discord) =====
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
 
-    # Flask가 포트를 열고 Render가 감지할 시간을 약간 줌
-    time.sleep(3)
-
-    # Discord 봇 실행
+    time.sleep(3)  # Flask 감지 대기
     run_discord()
