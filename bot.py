@@ -2,13 +2,13 @@ import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import re, json, os
-from typing import Dict, List, Any
+from typing import Dict, Any
 import discord
 from discord.ext import commands
+from flask import Flask
+import threading
 
 # ===== 설정 =====
-import os
-
 TOKEN = os.getenv("TOKEN")  # Render 환경변수에서 불러오기
 TZ = ZoneInfo("Asia/Seoul")
 DATA_FILE = "boss_data.json"
@@ -27,12 +27,9 @@ BOSS_CYCLE = {
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
-tree = bot.tree
-
-# ===== 데이터 구조 =====
 SCHEDULES: Dict[int, Dict[str, Dict[str, Any]]] = {}
 
-# ===== JSON 저장 =====
+# ===== JSON 저장/복원 =====
 def save_data():
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -40,24 +37,16 @@ def save_data():
     except Exception as e:
         print(f"[저장 오류] {e}")
 
-# ===== JSON 복원 (자동 오류 처리 포함) =====
 def load_data():
     global SCHEDULES
     if not os.path.exists(DATA_FILE):
         print("📁 데이터 파일 없음 → 새로 생성 예정")
         SCHEDULES = {}
         return
-
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             raw = json.load(f)
-
-        if not isinstance(raw, dict):
-            print("⚠️ boss_data.json 구조가 잘못되어 초기화합니다.")
-            SCHEDULES = {}
-            save_data()
-            return
-
+        SCHEDULES.clear()
         for gid, bosses in raw.items():
             gid = int(gid)
             SCHEDULES[gid] = {}
@@ -70,8 +59,7 @@ def load_data():
                         "prealert_sent": d.get("prealert_sent", False)
                     }
                 except Exception as e:
-                    print(f"⚠️ {bname} 데이터 손상으로 무시됨: {e}")
-
+                    print(f"⚠️ {bname} 데이터 손상 무시: {e}")
         print("✅ JSON 데이터 복원 완료")
     except Exception as e:
         print(f"⚠️ boss_data.json 로드 실패 → 초기화: {e}")
@@ -100,7 +88,6 @@ async def register_boss(message, boss_name, time_str):
     if not parsed:
         await message.channel.send("❌ 형식: `13:30`")
         return
-
     hh, mm = parsed
     spawn, kill, cycle = calc_spawn(boss_name, hh, mm)
     SCHEDULES.setdefault(gid, {})[boss_name] = {
@@ -110,12 +97,11 @@ async def register_boss(message, boss_name, time_str):
         "prealert_sent": False
     }
     save_data()
-
     await message.channel.send(
         f"✅ **{boss_name}** 등록 완료!\n🕒 {kill.strftime('%m/%d %H:%M')} → 💀 다음 젠: {spawn.strftime('%m/%d %H:%M')} ({cycle}시간)"
     )
 
-# ===== 메인 명령어 =====
+# ===== 명령어 처리 =====
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -124,13 +110,11 @@ async def on_message(message):
     content = message.content.strip()
     gid = message.guild.id
 
-    # --- 📋 .보스 (임베드 출력)
     if content == ".보스":
         items = SCHEDULES.get(gid, {})
         if not items:
             await message.channel.send("📭 등록된 젠이 없습니다.")
             return
-
         now = datetime.now(TZ)
         embed = discord.Embed(
             title="📋 보스 젠 현황",
@@ -147,18 +131,15 @@ async def on_message(message):
                 h, m = divmod(int(rem.total_seconds() // 60), 60)
                 status = f"({h}시간 {m}분 남음)"
                 color = "🟩" if rem.total_seconds() > 3600 else "🟨"
-
             embed.add_field(
                 name=f"{color} {boss}",
                 value=f"{spawn.strftime('%m/%d %H:%M')} {status}",
                 inline=False
             )
-
         embed.set_footer(text=f"기준 시각: {now.strftime('%m/%d %H:%M')}")
         await message.channel.send(embed=embed)
         return
 
-    # --- 🗑️ .삭제 보스명
     elif content.startswith(".삭제"):
         parts = content.split()
         if len(parts) != 2:
@@ -168,24 +149,20 @@ async def on_message(message):
         if gid not in SCHEDULES or boss not in SCHEDULES[gid]:
             await message.channel.send(f"📭 **{boss}** 젠 기록이 없습니다.")
             return
-
         del SCHEDULES[gid][boss]
         save_data()
         await message.channel.send(f"🗑️ **{boss}** 젠 기록을 삭제했습니다.")
         return
 
-    # --- ⏰ .보스명 13:30 등록
     elif content.startswith("."):
         parts = content[1:].split()
         if len(parts) != 2:
             await message.channel.send("❌ 사용법: `.보스명 13:30`")
             return
-
         boss_name, time_str = parts
         if boss_name not in BOSS_CYCLE:
             await message.channel.send("❌ 존재하지 않는 보스명입니다.")
             return
-
         await register_boss(message, boss_name, time_str)
         return
 
@@ -202,12 +179,10 @@ async def alarm_loop():
                 ch = bot.get_channel(data["channel"])
                 if not ch:
                     continue
-                # 10분 전 알림
                 if now >= pre and not data.get("prealert_sent", False) and now < spawn:
                     await ch.send(f"🔔 **{boss}** 젠 {PRE_ALERT_MIN}분 전! @everyone")
                     data["prealert_sent"] = True
                     changed = True
-                # 본 젠
                 if now >= spawn:
                     await ch.send(f"⚠️ **{boss} 젠 시간!** @everyone")
                     del SCHEDULES[gid][boss]
@@ -216,30 +191,18 @@ async def alarm_loop():
             save_data()
         await asyncio.sleep(30)
 
-# ===== 실행 =====
-@bot.event
-async def on_ready():
-    print(f"✅ 로그인: {bot.user}")
-    load_data()
-    bot.loop.create_task(alarm_loop())
-
-bot.run(TOKEN)
-
-# ===== keep-alive for Render Web Service =====
-from flask import Flask
-import threading
-
-app = Flask('')
+# ===== Flask keep-alive =====
+app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "✅ BossTimerBot is alive."
+    return "✅ BossTimerBot is running!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
 
-threading.Thread(target=run).start()
-# =============================================
+# Flask 서버를 별도 스레드로 실행
+threading.Thread(target=run, daemon=True).start()
 
 # ===== Discord Bot 실행 =====
 @bot.event
