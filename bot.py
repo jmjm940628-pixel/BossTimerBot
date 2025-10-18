@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-import re, json, os, threading
+import re, json, os, threading, time
 from typing import Dict, Any
 import discord
 from discord.ext import commands
@@ -198,8 +198,7 @@ def home():
     return "✅ BossTimerBot is running on Render!"
 
 def run_flask():
-    import os
-    port = int(os.environ.get("PORT", 8080))  # Render가 자동으로 지정한 포트 사용
+    port = int(os.environ.get("PORT", 8080))  # Render에서 지정한 포트 사용
     app.run(host='0.0.0.0', port=port)
 
 # ===== Discord Bot 실행 =====
@@ -212,7 +211,14 @@ async def on_ready():
 def run_discord():
     bot.run(TOKEN)
 
-# 두 개를 병렬 실행
+# ===== 실행 순서 (Flask → Discord 순서로) =====
 if __name__ == "__main__":
-    threading.Thread(target=run_flask, daemon=True).start()
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+
+    # Flask가 포트를 열고 Render가 감지할 시간을 약간 줌
+    time.sleep(3)
+
+    # Discord 봇 실행
     run_discord()
