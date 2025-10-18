@@ -1,12 +1,11 @@
 import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-import re, json, os
+import re, json, os, threading
 from typing import Dict, Any
 import discord
 from discord.ext import commands
 from flask import Flask
-import threading
 
 # ===== 설정 =====
 TOKEN = os.getenv("TOKEN")  # Render 환경변수에서 불러오기
@@ -191,24 +190,27 @@ async def alarm_loop():
             save_data()
         await asyncio.sleep(30)
 
-# ===== Flask keep-alive =====
+# ===== Flask keep-alive (Render용) =====
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "✅ BossTimerBot is running!"
+    return "✅ BossTimerBot is running on Render!"
 
-def run():
+def run_flask():
     app.run(host='0.0.0.0', port=8080)
-
-# Flask 서버를 별도 스레드로 실행
-threading.Thread(target=run, daemon=True).start()
 
 # ===== Discord Bot 실행 =====
 @bot.event
 async def on_ready():
-    print(f"✅ 로그인: {bot.user}")
+    print(f"✅ 로그인 완료: {bot.user}")
     load_data()
     bot.loop.create_task(alarm_loop())
 
-bot.run(TOKEN)
+def run_discord():
+    bot.run(TOKEN)
+
+# 두 개를 병렬 실행
+if __name__ == "__main__":
+    threading.Thread(target=run_flask, daemon=True).start()
+    run_discord()
