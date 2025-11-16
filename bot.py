@@ -78,6 +78,9 @@ def calc_spawn(boss: str, hh: int, mm: int):
     cycle = BOSS_CYCLE[boss]
     now = datetime.now(TZ)
     kill = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    # 현재보다 미래라면 → 하루 전으로 조정
+    if kill > now:
+        kill -= timedelta(days=1)
     spawn = kill + timedelta(hours=cycle)
     return spawn, kill, cycle
 
